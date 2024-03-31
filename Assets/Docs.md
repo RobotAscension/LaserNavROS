@@ -2,7 +2,7 @@
 
 ## 1. 主要框架
 
-![Framework Diagram](frame.PNG)
+![Framework Diagram](frame.png)
 
 
 ## 2. 分割
