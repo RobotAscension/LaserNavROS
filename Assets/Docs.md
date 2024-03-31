@@ -4,12 +4,12 @@
 
 This project focuses on .
 
-![Framework Diagram](Assets/frame.PNG)
+![Framework Diagram](frame.PNG)
 
 
 ## 2. 分割
 
-In this section, we discuss the segmentation process used in the project. Segmentation refers to the process of dividing the input data (e.g., images, point clouds) into meaningful segments or regions. We outline the algorithms, techniques, or methodologies employed for segmentation and provide insights into how it contributes to the overall goal of the project.
+采用自适应断点检测方法，对于点数为n的2d激光雷达数据，连续点[p_n]和[p_{n}]
 
 ## 3. 特征提取
 
