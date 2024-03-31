@@ -4,7 +4,7 @@
 
 This project focuses on .
 
-![Framework Diagram](Assets/frame.png)
+![Framework Diagram](Assets/frame.PNG)
 
 
 ## 2. 分割
