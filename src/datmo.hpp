@@ -46,7 +46,7 @@
 #include <tf/tf.h>
 #include <datmo/TrackArray.h>
 #include <datmo/Track.h>
-
+#include <geometry_msgs/PoseArray.h>
 #include "cluster.hpp"
 
 typedef std::pair<double, double> Point;
@@ -74,6 +74,7 @@ public:
 private:
   ros::Publisher pub_marker_array; 
   ros::Publisher pub_tracks_box_kf;
+  ros::Publisher pub_corner_p;
   ros::Subscriber sub_scan;
   sensor_msgs::LaserScan scan;
   vector<Cluster> clusters;

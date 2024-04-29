@@ -46,7 +46,9 @@ Datmo::Datmo(){
 
   pub_tracks_box_kf     = n.advertise<datmo::TrackArray>("datmo/box_kf", 10);
   pub_marker_array   = n.advertise<visualization_msgs::MarkerArray>("datmo/marker_array", 10);
-  sub_scan = n.subscribe("/scan", 1, &Datmo::callback, this);
+  pub_corner_p = n.advertise<geometry_msgs::PoseArray>("datmo/corner_points", 10);
+
+  sub_scan = n.subscribe("/scan_near", 1, &Datmo::callback, this);
 
 }
 
@@ -63,7 +65,7 @@ void Datmo::callback(const sensor_msgs::LaserScan::ConstPtr& scan_in){
 
   // Only if there is a transform between the world and lidar frame continue
   if(tf_listener.canTransform(world_frame, lidar_frame, ros::Time())){
-
+   
     //Find position of ego vehicle in world frame, so it can be fed through to the cluster objects
     tf::StampedTransform ego_pose;
     tf_listener.lookupTransform(world_frame, lidar_frame, ros::Time(0), ego_pose);
@@ -166,12 +168,16 @@ void Datmo::callback(const sensor_msgs::LaserScan::ConstPtr& scan_in){
     //Visualizations and msg publications
     visualization_msgs::MarkerArray marker_array;
     datmo::TrackArray track_array_box_kf; 
+    geometry_msgs::PoseArray corner_points_around;
+     corner_points_around.poses.resize(clusters.size());
     for (unsigned int i =0; i<clusters.size();i++){
 
       track_array_box_kf.tracks.push_back(clusters[i].msg_track_box_kf);
      
       if (p_marker_pub){
         marker_array.markers.push_back(clusters[i].getClosestCornerPointVisualisationMessage());
+        
+        //std::cout << "CC_Point: " << clusters[i].getClosestCornerPointVisualisationMessage().points[0].x << " " << clusters[i].getClosestCornerPointVisualisationMessage().points[0].y << std::endl;
         marker_array.markers.push_back(clusters[i].getBoundingBoxCenterVisualisationMessage());
         marker_array.markers.push_back(clusters[i].getArrowVisualisationMessage());
         marker_array.markers.push_back(clusters[i].getThetaL1VisualisationMessage());
@@ -184,8 +190,24 @@ void Datmo::callback(const sensor_msgs::LaserScan::ConstPtr& scan_in){
         marker_array.markers.push_back(clusters[i].getLineVisualisationMessage());
         marker_array.markers.push_back(clusters[i].getBoxSolidVisualisationMessage());
       }; 
-    }
+      float x1 = clusters[i].getClosestCornerPointVisualisationMessage().points[0].x;
+      float y1 = clusters[i].getClosestCornerPointVisualisationMessage().points[0].y;
+      float z1 = 0;
+      // push back [x1,y1,z1] to corner_points_around which is of the type of geometry_msgs::PoseArray
 
+
+
+      corner_points_around.poses[i].position.x = x1;
+      corner_points_around.poses[i].position.y = y1;
+      corner_points_around.poses[i].position.z = z1;
+      corner_points_around.poses[i].orientation.w = 1.0;
+
+      corner_points_around.poses[i].orientation.x = 0.0;  
+      corner_points_around.poses[i].orientation.y = 0.0;  
+      corner_points_around.poses[i].orientation.z = 0.0;  
+
+    }
+    pub_corner_p.publish(corner_points_around);
     pub_marker_array.publish(marker_array);
     pub_tracks_box_kf.publish(track_array_box_kf);
     visualiseGroupedPoints(point_clusters);
