@@ -40,9 +40,9 @@ Datmo::Datmo(){
   n_private.param("world_frame", world_frame, string("map"));
   ROS_INFO("The lidar_frame is: %s and the world frame is: %s", lidar_frame.c_str(), world_frame.c_str());
   n_private.param("threshold_distance", dth, 0.2);
-  n_private.param("max_cluster_size", max_cluster_size, 360);
+  n_private.param("max_cluster_size", max_cluster_size, 100);
   n_private.param("euclidean_distance", euclidean_distance, 0.25);
-  n_private.param("pub_markers", p_marker_pub, false);
+  n_private.param("pub_markers", p_marker_pub, true);
 
   pub_tracks_box_kf     = n.advertise<datmo::TrackArray>("datmo/box_kf", 10);
   pub_marker_array   = n.advertise<visualization_msgs::MarkerArray>("datmo/marker_array", 10);
@@ -209,7 +209,7 @@ void Datmo::callback(const sensor_msgs::LaserScan::ConstPtr& scan_in){
     }
     pub_corner_p.publish(corner_points_around);
     pub_marker_array.publish(marker_array);
-    pub_tracks_box_kf.publish(track_array_box_kf);
+    // pub_tracks_box_kf.publish(track_array_box_kf);
     visualiseGroupedPoints(point_clusters);
     
   }

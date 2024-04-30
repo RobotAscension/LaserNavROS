@@ -43,7 +43,7 @@ void cornerPointsCallback(const geometry_msgs::PoseArray::ConstPtr& msg){
 double findNearestDistance(const std::vector<std::pair<double, double>>& points,
                            const std::vector<std::pair<double, double>>& target_points,
                            int index) {
-    double min_distance = std::numeric_limits<double>::max();
+    double min_distance = 10;
     const auto& target_point = points[index];
 
     for (const auto& corner_point : target_points) {
@@ -65,7 +65,7 @@ double findNearestDistance(const std::vector<std::pair<double, double>>& points,
 void globalPlanCallback(const nav_msgs::Path::ConstPtr& msg) {
     std::vector<Point2D> raw_point2d;
     // 只取前50个点
-    for ( int i = 0; i < msg->poses.size() && i < 30 * 10; i+=10) {
+    for ( int i = 0; i < msg->poses.size() && i < 30 * 5; i+=5) {
         // 提取x和y坐标
         double x = msg->poses[i].pose.position.x;
         double y = msg->poses[i].pose.position.y;
@@ -81,12 +81,17 @@ void globalPlanCallback(const nav_msgs::Path::ConstPtr& msg) {
     for (int i = 0; i < raw_point2d.size(); i++) {
         //double x = raw_point2d[i][0];
         //double y = raw_point2d[i][1];
-        std::vector<std::pair<double, double>> discrete_points;
-        std::vector<std::pair<double, double>> corner_points;
-        double distance = findNearestDistance(discrete_points, corner_points, i);
+        // std::vector<std::pair<double, double>> discrete_points;
+        // std::vector<std::pair<double, double>> corner_points;
+        // std::cout << "raw_point2d_x: " << raw_point2d[i] .first << std::endl;
+        // std::cout << "raw_point2d_y: " << raw_point2d[i].second << std::endl;
+        //std::cout << "corner_points_x: " << corner_points[i].first << std::endl;
+        //std::cout << "corner_points_y: " <<corner_points[i].second << std::endl;
+        double distance = findNearestDistance(raw_point2d, corner_points, i);
+        std::cout << "distance: " << distance << std::endl;
 
         distance = std::min(distance, 0.5);
-        std::cout << "distance: " << distance << std::endl;
+        
         
          bounds.push_back(distance);
         
@@ -122,9 +127,9 @@ void globalPlanCallback(const nav_msgs::Path::ConstPtr& msg) {
     const std::vector<double>& result_x = solver.opt_x();
     const std::vector<double>& result_y = solver.opt_y();
 
-   for (int i = 0; i < result_x.size(); ++i) {
-        std::cout << "  point " << i << ": (" << result_x[i] << ", " << result_y[i] << ")" << std::endl;
-    }
+   //for (int i = 0; i < result_x.size(); ++i) {
+        //std::cout << "  point " << i << ": (" << result_x[i] << ", " << result_y[i] << ")" << std::endl;
+  //  }
         nav_msgs::Path smooth_path;
     smooth_path.header.frame_id = "map";
     smooth_path.header.stamp = ros::Time::now();
@@ -430,7 +435,7 @@ int main(int argc, char** argv) {
     // 初始化ROS节点
     ros::init(argc, argv, "fem_smoother");
     ros::NodeHandle nh;
- ros::Subscriber sub_corner_points = nh.subscribe("/datmo/corner_points", 10, cornerPointsCallback);
+    ros::Subscriber sub_corner_points = nh.subscribe("/datmo/corner_points", 10, cornerPointsCallback);
     // 订阅全局路径话题
     ros::Subscriber sub_plan = nh.subscribe("/move_base/TebLocalPlannerROS/global_plan", 10, globalPlanCallback);
     // subscribe geometry_msgs::Point topic for the data of corner points
