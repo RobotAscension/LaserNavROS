@@ -1,0 +1,30 @@
+<launch>
+
+  <arg name="bag" />
+  <param name="use_sim_time" value="true" />
+
+  <node pkg="rosbag" type="play" name="player" required="true" output="screen" args=" -r 5 --clock $(find datmo)/examples/$(arg bag).bag"/>
+  
+  <!-- <node pkg="datmo" type="robot_pose_to_pose_stamped" name="robot_pose_to_pose_stamped" /> 
+  
+  <node pkg="datmo" type="pointcloud_distance_filter" name="pointcloud_distance_filter" /> -->
+
+
+ <node type="rviz" name="rviz" pkg="rviz" args="-d $(find datmo)/config/config_pc.rviz" /> 
+ 
+
+
+  <node pkg="datmo" type="fem_smoother" name="fem_smoother" /> 
+   <node pkg="datmo" type="datmo" name="datmo" output="screen">
+      <param name="max_cluster_size" value="100" />
+      <param name="lidar_frame" value="base_link" />
+      <param name="world_frame" value="map" />
+      <param name="threshold_distance" value="0.3" />
+      <param name="euclidean_distance" value="0.2" />
+      <param name="pub_markers" value="true" />
+   </node>
+
+
+
+
+</launch>
