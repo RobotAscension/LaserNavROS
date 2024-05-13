@@ -5,10 +5,13 @@
 #include <osqp/osqp.h>
 #include "fem_smoother.h"
 #include <geometry_msgs/PoseArray.h>
+#include <sensor_msgs/LaserScan.h>
 
 // #include "cyber/common/log.h"
 /**/
 typedef std::pair<double, double> Point2D;
+bool is_obstacle = false;
+double Bias = 0.0;
 
 struct Config {
     double weight_fem_pos_deviation = 1.0e10;
@@ -66,15 +69,32 @@ double findNearestDistance(const std::pair<double, double> & points,
     return index;
 }
 
+void LaserNearCallback(const sensor_msgs::LaserScan::ConstPtr& msg) {
+    int nNum = msg->ranges.size();
+    int nMid = nNum/2;
+    float fMidDist = msg->ranges[nMid];
+    if (fMidDist < 10.0) {
+        is_obstacle = true;
+        Bias = 1.5;
+    }
+
+}
 // 回调函数处理全局路径数据
 void globalPlanCallback(const nav_msgs::Path::ConstPtr& msg) {
     std::vector<Point2D> raw_point2d;
     // 只取前50个点
-    for ( int i = 0; i < msg->poses.size() && i < 20 * 15; i+=15) {
+    int num_d = 15;
+    for ( int i = 0; i < msg->poses.size() && i < 20 * num_d; i+=num_d) {
         // 提取x和y坐标
         double x = msg->poses[i].pose.position.x;
         double y = msg->poses[i].pose.position.y;
+        if(is_obstacle){
+          double delta_x = msg->poses[i+num_d].pose.position.x-x;
+          double delta_y = msg->poses[i+num_d].pose.position.y-y;
         
+          x = msg->poses[i].pose.position.x + 0.2*delta_y*i/num_d;
+          y = msg->poses[i].pose.position.y - 0.2*delta_x*i/num_d;
+        }
         // 将坐标点添加到raw_point2d中
         raw_point2d.push_back(std::make_pair(x, y));
     }
@@ -439,6 +459,8 @@ int main(int argc, char** argv) {
     // 初始化ROS节点
     ros::init(argc, argv, "fem_smoother");
     ros::NodeHandle nh;
+    ros::Subscriber sub_scan = nh.subscribe("/scan_near", 10, LaserNearCallback);
+
     ros::Subscriber sub_corner_points = nh.subscribe("/datmo/corner_points", 10, cornerPointsCallback);
     // 订阅全局路径话题
     ros::Subscriber sub_plan = nh.subscribe("/move_base/TebLocalPlannerROS/global_plan", 10, globalPlanCallback);
