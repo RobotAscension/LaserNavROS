@@ -75,7 +75,7 @@ void LaserNearCallback(const sensor_msgs::LaserScan::ConstPtr& msg) {
     float fMidDist = msg->ranges[nMid];
     if (fMidDist < 10.0) {
         is_obstacle = true;
-        Bias = 1.5;
+        Bias = fMidDist;
     }
 
 }
@@ -91,9 +91,18 @@ void globalPlanCallback(const nav_msgs::Path::ConstPtr& msg) {
         if(is_obstacle){
           double delta_x = msg->poses[i+num_d].pose.position.x-x;
           double delta_y = msg->poses[i+num_d].pose.position.y-y;
-        
-          x = msg->poses[i].pose.position.x + 0.2*delta_y*i/num_d;
-          y = msg->poses[i].pose.position.y - 0.2*delta_x*i/num_d;
+         // x = msg->poses[i].pose.position.x + 0.2*delta_y*i/num_d;
+         // y = msg->poses[i].pose.position.y - 0.2*delta_x*i/num_d;
+        double deltaxy = std::sqrt(delta_x*delta_x + delta_y*delta_y);
+        double theta = std::atan2(delta_y, delta_x);
+        int k = Bias/deltaxy;
+        if (i == k * num_d)
+          {
+            x = msg->poses[i].pose.position.x + .6*delta_y*i/num_d;
+            y = msg->poses[i].pose.position.y - .6*delta_x*i/num_d;
+          }
+
+
         }
         // 将坐标点添加到raw_point2d中
         raw_point2d.push_back(std::make_pair(x, y));
@@ -114,8 +123,8 @@ void globalPlanCallback(const nav_msgs::Path::ConstPtr& msg) {
         
         std::cout << "distance: " << distance << std::endl;
 
-        distance = std::min(distance, 5.0);
-        
+        //distance = std::min(distance, 5.0);
+        distance = std::min(distance, 15.0);
         
          bounds.push_back(distance);
         
@@ -174,6 +183,7 @@ void globalPlanCallback(const nav_msgs::Path::ConstPtr& msg) {
     ros::Publisher smooth_path_pub =
         ros::NodeHandle().advertise<nav_msgs::Path>("smooth_path", 10);
     smooth_path_pub.publish(smooth_path);
+    sleep(.5);
 }
 bool FemPosDeviationOsqpInterface::Solve() {
   // Sanity Check
