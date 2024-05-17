@@ -11,8 +11,9 @@
 /**/
 typedef std::pair<double, double> Point2D;
 bool is_obstacle = false;
-double Bias = 0.0;
-
+double Distance_obstacle;
+double delta_l = 0.1;
+double theta_l = 0.0;
 struct Config {
     double weight_fem_pos_deviation = 1.0e10;
     double weight_ref_deviation = 1.0;
@@ -72,11 +73,19 @@ double findNearestDistance(const std::pair<double, double> & points,
 void LaserNearCallback(const sensor_msgs::LaserScan::ConstPtr& msg) {
     int nNum = msg->ranges.size();
     int nMid = nNum/2;
-    float fMidDist = msg->ranges[nMid];
+    float fMidDist = 10.0;
+    for (int i = -10; i < 10; i++) {
+       if  (fMidDist > msg->ranges[nMid+i])
+       {
+        fMidDist = msg->ranges[nMid+i];
+       }
+    }
     if (fMidDist < 10.0) {
         is_obstacle = true;
-        Bias = fMidDist;
+        
     }
+    else{is_obstacle = false;}
+    Distance_obstacle = fMidDist;
 
 }
 // 回调函数处理全局路径数据
@@ -84,7 +93,7 @@ void globalPlanCallback(const nav_msgs::Path::ConstPtr& msg) {
     std::vector<Point2D> raw_point2d;
     // 只取前50个点
     int num_d = 15;
-    for ( int i = 0; i < msg->poses.size() && i < 20 * num_d; i+=num_d) {
+    for ( int i = 0; i < msg->poses.size() && i < 30 * num_d; i+=num_d) {
         // 提取x和y坐标
         double x = msg->poses[i].pose.position.x;
         double y = msg->poses[i].pose.position.y;
@@ -93,16 +102,17 @@ void globalPlanCallback(const nav_msgs::Path::ConstPtr& msg) {
           double delta_y = msg->poses[i+num_d].pose.position.y-y;
          // x = msg->poses[i].pose.position.x + 0.2*delta_y*i/num_d;
          // y = msg->poses[i].pose.position.y - 0.2*delta_x*i/num_d;
-        double deltaxy = std::sqrt(delta_x*delta_x + delta_y*delta_y);
-        double theta = std::atan2(delta_y, delta_x);
-        int k = Bias/deltaxy;
+        delta_l = std::sqrt(delta_x*delta_x + delta_y*delta_y);
+        theta_l = std::atan2(delta_y, delta_x);
+        /*
+                int k = Bias/deltaxy;
         if (i == k * num_d)
           {
-            x = msg->poses[i].pose.position.x + .6*delta_y*i/num_d;
-            y = msg->poses[i].pose.position.y - .6*delta_x*i/num_d;
+            x = msg->poses[i].pose.position.x + 0.5*delta_y*i/num_d;
+            y = msg->poses[i].pose.position.y - 0.5*delta_x*i/num_d;
           }
-
-
+        
+        */
         }
         // 将坐标点添加到raw_point2d中
         raw_point2d.push_back(std::make_pair(x, y));
@@ -124,7 +134,7 @@ void globalPlanCallback(const nav_msgs::Path::ConstPtr& msg) {
         std::cout << "distance: " << distance << std::endl;
 
         //distance = std::min(distance, 5.0);
-        distance = std::min(distance, 15.0);
+        distance = std::min(distance, 10.0);
         
          bounds.push_back(distance);
         
@@ -183,7 +193,7 @@ void globalPlanCallback(const nav_msgs::Path::ConstPtr& msg) {
     ros::Publisher smooth_path_pub =
         ros::NodeHandle().advertise<nav_msgs::Path>("smooth_path", 10);
     smooth_path_pub.publish(smooth_path);
-    sleep(.5);
+    //sleep(0.6);
 }
 bool FemPosDeviationOsqpInterface::Solve() {
   // Sanity Check
@@ -406,6 +416,33 @@ void FemPosDeviationOsqpInterface::CalculateAffineConstraint(
 
   for (int i = 0; i < num_of_points_; ++i) {
     const auto& ref_point_xy = ref_points_[i];
+    // Width of car
+    double Width = 3.0;
+    bool is_on_road = false;
+    delta_l = std::sqrt(std::pow(ref_point_xy.first - ref_points_[i+1].first, 2)+std::pow(ref_point_xy.second - ref_points_[i-1].second, 2));
+    theta_l = std::atan2(ref_point_xy.second - ref_points_[i-1].second, ref_point_xy.first - ref_points_[i+1].first);
+    double Distance_obs = 5;
+    for (int j = 0; j < corner_points.size(); ++j) 
+    {   
+        
+         if (std::sqrt(std::pow(corner_points[j].first - ref_point_xy.first, 2) + std::pow(corner_points[j].second - ref_point_xy.second, 2))<0.2)
+         {  
+          is_on_road = true;
+          double loc_obs_x = corner_points[j].first;
+          double loc_obs_y = corner_points[j].second;
+          Distance_obs=std::sqrt(std::pow(corner_points[j].first - ref_point_xy.first, 2) + std::pow(corner_points[j].second - ref_point_xy.second, 2));
+        }
+    }
+    if (std::abs(Distance_obstacle-i*delta_l)<0.1)
+    {
+      double bias_x = std::abs(Width/2* cos(theta_l));
+      double bias_y = std::abs(Width/2* sin(theta_l));
+      
+      upper_bounds->push_back(ref_point_xy.first + bias_y + bounds_around_refs_[i] );
+      upper_bounds->push_back(ref_point_xy.second + bias_x + bounds_around_refs_[i]);
+      lower_bounds->push_back(ref_point_xy.first + bias_y - bounds_around_refs_[i]);
+      lower_bounds->push_back(ref_point_xy.second + bias_x - bounds_around_refs_[i]);
+    }
     upper_bounds->push_back(ref_point_xy.first + bounds_around_refs_[i]);
     upper_bounds->push_back(ref_point_xy.second + bounds_around_refs_[i]);
     lower_bounds->push_back(ref_point_xy.first - bounds_around_refs_[i]);
