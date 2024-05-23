@@ -163,8 +163,8 @@ void globalPlanCallback(const nav_msgs::Path::ConstPtr& msg) {
         
         //std::cout << "distance: " << distance << std::endl;
 
-        distance = std::min(distance, 5.0);
-        //distance = 4.0;
+        //distance = std::min(distance, 4.0);
+        distance = 0.5;
         
          bounds.push_back(distance);
         
@@ -179,7 +179,7 @@ void globalPlanCallback(const nav_msgs::Path::ConstPtr& msg) {
     std::cerr << "  opt_x or opt_y is nullptr" << std::endl;
 
   }
-*/  pub_path = false;
+*/  pub_path = true;
     FemPosDeviationOsqpInterface solver;
     Config config;
     solver.set_weight_fem_pos_deviation(config.weight_fem_pos_deviation);
@@ -224,7 +224,7 @@ void globalPlanCallback(const nav_msgs::Path::ConstPtr& msg) {
         ros::NodeHandle().advertise<nav_msgs::Path>("smooth_path", 10);
     smooth_path_pub.publish(smooth_path);
     }
-    sleep(1.0);
+    sleep(0.0);
 }
 bool FemPosDeviationOsqpInterface::Solve() {
   // Sanity Check
@@ -448,7 +448,7 @@ void FemPosDeviationOsqpInterface::CalculateAffineConstraint(
   for (int i = 0; i < num_of_points_; ++i) {
     const auto& ref_point_xy = ref_points_[i];
     // Width of car
-    double Width = 2.0;
+    double Width = 3.0;
     bool is_on_road = false;
     delta_l = std::sqrt(std::pow(ref_point_xy.first - ref_points_[i+1].first, 2)+std::pow(ref_point_xy.second - ref_points_[i-1].second, 2));
     theta_l = std::atan2(ref_point_xy.second - ref_points_[i-1].second, ref_point_xy.first - ref_points_[i+1].first);
@@ -456,7 +456,7 @@ void FemPosDeviationOsqpInterface::CalculateAffineConstraint(
     for (int j = 0; j < corner_points.size(); ++j) 
     {   
         
-         if (std::sqrt(std::pow(corner_points[j].first - ref_point_xy.first, 2) + std::pow(corner_points[j].second - ref_point_xy.second, 2))<0.2)
+         if (std::sqrt(std::pow(corner_points[j].first - ref_point_xy.first, 2) + std::pow(corner_points[j].second - ref_point_xy.second, 2))<0.5)
          {  
           is_on_road = true;
           double loc_obs_x = corner_points[j].first;
@@ -464,6 +464,7 @@ void FemPosDeviationOsqpInterface::CalculateAffineConstraint(
           Distance_obs=std::sqrt(std::pow(corner_points[j].first - ref_point_xy.first, 2) + std::pow(corner_points[j].second - ref_point_xy.second, 2));
         }
     }
+    
     if (i==0)
     {
       upper_bounds->push_back(ref_point_xy.first + 0.01 );
@@ -471,7 +472,7 @@ void FemPosDeviationOsqpInterface::CalculateAffineConstraint(
       lower_bounds->push_back(ref_point_xy.first + 0.01);
       lower_bounds->push_back(ref_point_xy.second + 0.01);
     }
-    else if (std::abs(Distance_obstacle-i*delta_l)<0.05)
+    else if (Distance_obs<0.5)
 
     {
       double bias_x = std::abs(Width/2* cos(theta_l));
@@ -548,7 +549,7 @@ int main(int argc, char** argv) {
     // 初始化ROS节点
     ros::init(argc, argv, "fem_smoother");
     ros::NodeHandle nh;
-    ros::Subscriber sub_scan = nh.subscribe("/scan_near", 10, LaserNearCallback);
+    ros::Subscriber sub_scan = nh.subscribe("/scan_filtered", 10, LaserNearCallback);
 
     ros::Subscriber sub_corner_points = nh.subscribe("/datmo/corner_points", 10, cornerPointsCallback);
     // 订阅全局路径话题
