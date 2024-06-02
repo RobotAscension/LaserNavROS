@@ -7,17 +7,21 @@
 #include <geometry_msgs/PoseArray.h>
 #include <tf/tf.h>
 #include <geometry_msgs/PointStamped.h>
-
+#include <visualization_msgs/Marker.h>
+#include <visualization_msgs/MarkerArray.h>
 #include <sensor_msgs/LaserScan.h>
 
 // #include "cyber/common/log.h"
-/**/
+
 typedef std::pair<double, double> Point2D;
+std::vector<Point2D> raw_point2d_global;
+std::vector<Point2D> raw_point2d;
 
 double bounding_size = 0.2;   // size of the bounding box 
-double Width = 2.0;          // width of the bias
-double obs_threshold = 1.0;   // threshold for the distance from route to the obstacles
-int route_length = 50;   // length of local path (sample points)
+double Width = 5.0;          // width of the bias
+double obs_threshold = 2.0;   // threshold for the distance from route to the obstacles
+int route_length = 30;   // length of local path (sample points)
+int num_d = 15;    // points of interval to extract from global path 
 
 struct Config {
     double weight_fem_pos_deviation = 1.0e10;
@@ -37,6 +41,7 @@ struct Config {
 };
 
 std::vector<Point2D> corner_points;
+std::vector<Point2D> corner_points_vel;
 
 void cornerPointsCallback(const geometry_msgs::PoseArray::ConstPtr& msg){
     for (int i = 0; i < msg->poses.size();  i++) {
@@ -44,7 +49,11 @@ void cornerPointsCallback(const geometry_msgs::PoseArray::ConstPtr& msg){
         
         double x = msg->poses[i].position.x;
         double y = msg->poses[i].position.y;
+        double vx = msg->poses[i].orientation.x;
+        double vy = msg->poses[i].orientation.y;
         corner_points.push_back(std::make_pair(x,y));
+        corner_points_vel.push_back(std::make_pair(vx,vy));
+        std::cout << "cornerPointsCallback: " << x << " " << y << " " << vx << " " << vy << std::endl;
 }
 }
 
@@ -75,20 +84,95 @@ double findNearestDistance(const std::pair<double, double> & points,
     return index;
 }
 
+void interpolatePath(nav_msgs::Path& path, double maxDistance) {
+    if (path.poses.size() < 2) {
+        return;
+    }
 
+    nav_msgs::Path interpolatedPath;
+    interpolatedPath.header = path.header;
+
+    interpolatedPath.poses.push_back(path.poses[0]); // 将第一个pose添加到插值路径中
+
+    for (size_t i = 1; i < path.poses.size(); i++) {
+        const auto& prevPose = path.poses[i - 1];
+        const auto& currPose = path.poses[i];
+
+        double distance = std::sqrt(std::pow(currPose.pose.position.x - prevPose.pose.position.x, 2) +
+                                    std::pow(currPose.pose.position.y - prevPose.pose.position.y, 2) +
+                                    std::pow(currPose.pose.position.z - prevPose.pose.position.z, 2));
+
+        if (distance > maxDistance) {
+            // 计算需要插入的新pose数量
+            int numInterpolatedPoses = std::ceil(distance / maxDistance);
+
+            // 计算插值的步长
+            double stepSize = 1.0 / (numInterpolatedPoses + 1);
+
+            // 进行插值并将新pose添加到插值路径中
+            for (int j = 0; j < numInterpolatedPoses; j++) {
+                double t = (j + 1) * stepSize;
+                geometry_msgs::PoseStamped interpolatedPose;
+                interpolatedPose.header = currPose.header;
+
+                interpolatedPose.pose.position.x = prevPose.pose.position.x + t * (currPose.pose.position.x - prevPose.pose.position.x);
+                interpolatedPose.pose.position.y = prevPose.pose.position.y + t * (currPose.pose.position.y - prevPose.pose.position.y);
+                interpolatedPose.pose.position.z = prevPose.pose.position.z + t * (currPose.pose.position.z - prevPose.pose.position.z);
+                interpolatedPose.pose.orientation.w = 1.0;
+
+                interpolatedPath.poses.push_back(interpolatedPose);
+            }
+        }
+
+        interpolatedPath.poses.push_back(currPose); // 将当前pose添加到插值路径中
+    }
+
+    path = interpolatedPath; // 将插值路径赋值给原始路径
+}
 // 回调函数处理全局路径数据
 void globalPlanCallback(const nav_msgs::Path::ConstPtr& msg) {
-    std::vector<Point2D> raw_point2d;
+    //raw_point2d.clear();
+    
     // 只取前50个点
-    int num_d = 15;
-    for ( int i = 0; i < msg->poses.size() && i < route_length * num_d; i+=num_d) {
+    for ( int i = 0; i < msg->poses.size(); i+=num_d) {
         // 提取x和y坐标
         double x = msg->poses[i].pose.position.x;
         double y = msg->poses[i].pose.position.y;
 
         // 将坐标点添加到raw_point2d中
-        raw_point2d.push_back(std::make_pair(x, y));
+        raw_point2d_global.push_back(std::make_pair(x, y));
     }
+};
+
+double robot_loc_x;
+double robot_loc_y;
+int loc_idx;
+void locPoseCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
+    robot_loc_x = msg->pose.position.x;
+    robot_loc_y = msg->pose.position.y;
+    double min_distance = 10.0;
+    for ( int i = 0; i < raw_point2d_global.size(); i+=1) {
+        double x = raw_point2d_global[i].first;
+        double y = raw_point2d_global[i].second;
+        double dis_i = std::sqrt((x - robot_loc_x)*(x - robot_loc_x) 
+        + (y - robot_loc_y)*(y - robot_loc_y));
+
+        if (dis_i < min_distance) {
+            min_distance = dis_i;
+            loc_idx = i;
+        }
+    }
+    for ( int i = loc_idx; i < route_length; i+=num_d) {
+        double x = raw_point2d_global[i].first;
+        double y = raw_point2d_global[i].second;
+        raw_point2d.push_back(std::make_pair(x, y));
+}
+}
+
+void onTimer(const ros::TimerEvent &e) {
+  //if(raw_point2d.size() == 0)
+  //  return;
+
     // set bounds around raw_point2d, length = 20
     std::vector<double> bounds;
     //bounds.reserve(raw_point2d.size());
@@ -387,30 +471,33 @@ void FemPosDeviationOsqpInterface::CalculateAffineConstraint(
     +std::pow(ref_point_xy.second - ref_points_[i-1].second, 2));
     double theta_l = std::atan2(ref_point_xy.second - ref_points_[i-1].second, ref_point_xy.first
      - ref_points_[i+1].first);
-    double Distance_obs = 5.0;
+    
+    double distance_obs2refpoint = 5.0;
+    double vel_obs = 0.0;
     for (int j = 0; j < corner_points.size(); ++j) 
     {   
-        
-         if (std::sqrt(std::pow(corner_points[j].first - ref_point_xy.first, 2) 
-         + std::pow(corner_points[j].second - ref_point_xy.second, 2))<obs_threshold)
+        distance_obs2refpoint = std::sqrt(std::pow(corner_points[j].first - ref_point_xy.first, 2) 
+         + std::pow(corner_points[j].second - ref_point_xy.second, 2));
+        vel_obs = std::sqrt(std::pow(corner_points_vel[j].first, 2) + std::pow(corner_points_vel[j].second, 2));
+         if (distance_obs2refpoint<obs_threshold && vel_obs<0.2)
          {  
           is_on_road = true;
           break;
         }
     }
     
-    if (i==0)
+    if (i==0 || i==num_of_points_-1)
     {
       upper_bounds->push_back(ref_point_xy.first + 0.01 );
       upper_bounds->push_back(ref_point_xy.second + 0.01);
       lower_bounds->push_back(ref_point_xy.first - 0.01);
       lower_bounds->push_back(ref_point_xy.second - 0.01);
     }
-    else if (is_on_road)
+    else if (is_on_road )
 
     {
-      double bias_x = std::abs(Width/2* cos(theta_l));
-      double bias_y = std::abs(Width/2* sin(theta_l));
+      double bias_x = std::abs(Width/2* cos(theta_l)) *exp(-distance_obs2refpoint);
+      double bias_y = std::abs(Width/2* sin(theta_l)) *exp(-distance_obs2refpoint);
       
       upper_bounds->push_back(ref_point_xy.first + bias_y + bounds_around_refs_[i] );
       upper_bounds->push_back(ref_point_xy.second + bias_x + bounds_around_refs_[i]);
@@ -484,10 +571,13 @@ int main(int argc, char** argv) {
     ros::NodeHandle nh;
 
     ros::Subscriber sub_corner_points = nh.subscribe("/datmo/corner_points", 10, cornerPointsCallback);
+    //ros::Subscriber sub_marker = nh.subscribe("/datmo/marker_array", 10, markerArrayCallback);
     // 订阅全局路径话题
-    ros::Subscriber sub_plan = nh.subscribe("/move_base/TebLocalPlannerROS/global_plan", 10, globalPlanCallback);
+    //ros::Subscriber sub_plan = nh.subscribe("/move_base/TebLocalPlannerROS/global_plan", 10, globalPlanCallback);
+    ros::Subscriber sub_plan = nh.subscribe("/move_base/global_plan", 10, globalPlanCallback);
+    ros::Subscriber sub_loc = nh.subscribe("/robot_posestamped",10,locPoseCallback);
     // subscribe geometry_msgs::Point topic for the data of corner points
-    
+    ros::Timer timer = nh.createTimer(ros::Duration(1.0), onTimer);
 
     ros::Publisher smooth_path_pub =
         ros::NodeHandle().advertise<nav_msgs::Path>("smooth_path", 10);
