@@ -49,7 +49,7 @@ Datmo::Datmo(){
   pub_corner_p = n.advertise<geometry_msgs::PoseArray>("datmo/corner_points", 10);
   
 
-  sub_scan = n.subscribe("/scan_near", 1, &Datmo::callback, this);
+  sub_scan = n.subscribe("/scan_filtered", 1, &Datmo::callback, this);
 
 }
 

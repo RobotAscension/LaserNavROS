@@ -246,7 +246,7 @@ void onTimer(const ros::TimerEvent &e) {
     }
     
     ros::Publisher smooth_path_pub =
-        ros::NodeHandle().advertise<nav_msgs::Path>("/smooth_path1", 10);
+        ros::NodeHandle().advertise<nav_msgs::Path>("/smooth_path", 10);
     smooth_path_pub.publish(smooth_path);
     
     sleep(0.0);
@@ -592,7 +592,7 @@ int main(int argc, char** argv) {
     ros::Timer timer = nh.createTimer(ros::Duration(1.0), onTimer);
   
     ros::Publisher smooth_path_pub =
-        ros::NodeHandle().advertise<nav_msgs::Path>("/smooth_path1", 10);
+        ros::NodeHandle().advertise<nav_msgs::Path>("/smooth_path", 10);
     // 进入ROS循环
     ros::spin();
 
